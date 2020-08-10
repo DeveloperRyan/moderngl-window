@@ -9,6 +9,11 @@ from moderngl_window.opengl.projection import Projection3D
 from moderngl_window.opengl.vao import VAO
 
 
+model_path = ''
+temp_min = 0
+temp_max = 0
+
+
 class FragmentPicking(moderngl_window.WindowConfig):
     """
     Demonstrates how you can pick exact positions on a model
@@ -33,6 +38,12 @@ class FragmentPicking(moderngl_window.WindowConfig):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        print(model_path)
+        print(temp_min)
+        print(temp_max)
+
+        print(self.argv)
         print("window buffer size:", self.wnd.buffer_size)
         self.marker_file = Path('markers.bin')
         # Object rotation
@@ -42,7 +53,7 @@ class FragmentPicking(moderngl_window.WindowConfig):
         self.zoom = 0
 
         # Load scene cached to speed up loading!
-        self.scene = self.load_scene('scenes/fragment_picking/centered.obj', cache=True)
+        self.scene = self.load_scene(f'scenes/fragment_picking/{model_path}', cache=True)
         # Grab the raw mesh/vertexarray
         self.mesh = self.scene.root_nodes[0].mesh.vao
         self.mesh_texture = self.scene.root_nodes[0].mesh.material.mat_texture.texture
@@ -104,7 +115,7 @@ class FragmentPicking(moderngl_window.WindowConfig):
         self.fragment_picker_program['diffuse_texture'].value = 2  # Read from texture channel 2
 
         # Picker geometry
-        self.marker_byte_size = 7 * 4  # position + normal + temperature (7 x 32bit floats) 
+        self.marker_byte_size = 7 * 4  # position + normal + temperature (7 x 32bit floats)
         self.picker_output = self.ctx.buffer(reserve=self.marker_byte_size)
         self.picker_vao = VAO(mode=moderngl.POINTS)
 
@@ -122,6 +133,15 @@ class FragmentPicking(moderngl_window.WindowConfig):
         self.quad_normals = geometry.quad_2d(size=(0.25, 0.25), pos=(0.75, 0.875))
         self.quad_depth = geometry.quad_2d(size=(0.25, 0.25), pos=(0.5, 0.875))
         self.quad_positions = geometry.quad_2d(size=(0.25, 0.25), pos=(0.25, 0.875))
+
+    # Add input arguments
+    @classmethod
+    def add_arguments(cls, parser):
+        parser.add_argument(
+            '--path',
+            help='the path to the 3D model to load',
+            type=str
+        )
 
     def render(self, time, frametime):
         self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE)
@@ -188,8 +208,8 @@ class FragmentPicking(moderngl_window.WindowConfig):
         # mouse coordinates starts in upper left corner
         # pixel positions starts and lower left corner
         pos = int(x * self.wnd.pixel_ratio), int(self.wnd.buffer_height - (y * self.wnd.pixel_ratio))
-        print("Picking mouse position", x, y)
-        print("Viewport position", pos)
+        # print("Picking mouse position", x, y)
+        # print("Viewport position", pos)
 
         self.fragment_picker_program['texel_pos'].value = pos
         self.fragment_picker_program['modelview'].write(self.modelview)
@@ -204,9 +224,12 @@ class FragmentPicking(moderngl_window.WindowConfig):
             print('Point is not on the mesh')
             return
 
-        print(f"Position: {x} {y} {z}")
-        print(f"Normal: {nx} {ny} {nz}")
-        print(f"Temperature: {round(temperature * 255)} (byte) {temperature} (float)")
+        # print(f"Position: {x} {y} {z}")
+        # print(f"Normal: {nx} {ny} {nz}")
+        color = round(temperature * 255)
+        mapped_temp = self.remap_temp(color, 0, 255, temp_min, temp_max)
+
+        print(f"Temperature: {mapped_temp}")
         self.marker_buffer.write(self.picker_output.read(), offset=self.marker_byte_size * self.num_markers)
         self.num_markers += 1
 
@@ -244,6 +267,13 @@ class FragmentPicking(moderngl_window.WindowConfig):
         with open('markers.bin', mode='wb') as fd:
             fd.write(self.marker_buffer.read(size=self.num_markers * self.marker_byte_size))
 
+    def remap_temp(self, value, in_min, in_max, out_min, out_max):
+        return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
 
 if __name__ == '__main__':
+    model_path = input("Enter the name or path to the file in the fragment picker folder:\n")
+    temp_min = int(input("enter the minimum value for the temperature range:\n"))
+    temp_max = int(input("enter the maximum value for the temperature range:\n"))
+
     moderngl_window.run_window_config(FragmentPicking)
